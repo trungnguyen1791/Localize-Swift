@@ -10,7 +10,7 @@ import Foundation
 
 /// Internal current language key
 let LCLCurrentLanguageKey = "LCLCurrentLanguageKey"
-
+let AppleLanguagesKey = "AppleLanguages"
 /// Default language. English. If English is unavailable defaults to base localization.
 let LCLDefaultLanguage = "en"
 
@@ -23,10 +23,10 @@ public let LCLLanguageChangeNotification = "LCLLanguageChangeNotification"
 // MARK: Localization Syntax
 
 /**
-Swift 1.x friendly localization syntax, replaces NSLocalizedString
-- Parameter string: Key to be localized.
-- Returns: The localized string.
-*/
+ Swift 1.x friendly localization syntax, replaces NSLocalizedString
+ - Parameter string: Key to be localized.
+ - Returns: The localized string.
+ */
 public func Localized(_ string: String) -> String {
     return string.localized()
 }
@@ -61,7 +61,7 @@ public extension String {
     func localized() -> String {
         return localized(using: nil, in: .main)
     }
-
+    
     /**
      Swift 2 friendly localization syntax with format arguments, replaces String(format:NSLocalizedString)
      - Returns: The formatted localized string with arguments.
@@ -120,8 +120,12 @@ open class Localize: NSObject {
         let selectedLanguage = availableLanguages().contains(language) ? language : defaultLanguage()
         if (selectedLanguage != currentLanguage()){
             UserDefaults.standard.set(selectedLanguage, forKey: LCLCurrentLanguageKey)
+            //            UserDefaults.standard.set([selectedLanguage], forKey: AppleLanguagesKey)
             UserDefaults.standard.synchronize()
             NotificationCenter.default.post(name: Notification.Name(rawValue: LCLLanguageChangeNotification), object: nil)
+            
+            //Additional
+            MethodSwizzleGivenClassName(cls: Bundle.self, originalSelector: Selector("localizedStringForKey:value:table:"), overrideSelector: Selector("specialLocalizedStringForKey:value:table:"))
         }
     }
     
@@ -165,3 +169,28 @@ open class Localize: NSObject {
     }
 }
 
+
+//Additional
+extension Bundle {
+    func specialLocalizedString(forKey: String, value: String?,table tableName: String?) -> String {
+        let currentLanguage = Localize.currentLanguage()
+        var bundle = Bundle()
+        if let _path = Bundle.main.path(forResource: currentLanguage, ofType: "lproj") {
+            bundle = Bundle(path: _path)!
+        } else {
+            let _path = Bundle.main.path(forResource: "Base", ofType: "lproj")!
+            bundle = Bundle(path: _path)!
+        }
+        return bundle.specialLocalizedString(forKey: forKey, value: value, table: tableName)
+    }
+}
+/// Exchange the implementation of two methods for the same Class
+func MethodSwizzleGivenClassName(cls: AnyClass, originalSelector: Selector, overrideSelector: Selector) {
+    let origMethod: Method = class_getInstanceMethod(cls, originalSelector)
+    let overrideMethod: Method = class_getInstanceMethod(cls, overrideSelector)
+    if (class_addMethod(cls, originalSelector, method_getImplementation(overrideMethod), method_getTypeEncoding(overrideMethod))) {
+        class_replaceMethod(cls, overrideSelector, method_getImplementation(origMethod), method_getTypeEncoding(origMethod))
+    } else {
+        method_exchangeImplementations(origMethod, overrideMethod);
+    }
+}
